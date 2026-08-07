@@ -1,5 +1,4 @@
 import os
-import tempfile
 import subprocess
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
@@ -17,32 +16,18 @@ def health_check():
 
 @app.post("/create-short")
 def create_short(req: VideoRequest):
-    cookie_path = None
-    input_path = None
-    output_path = None
-
     try:
         output_dir = "/tmp/downloads"
         os.makedirs(output_dir, exist_ok=True)
         input_path = os.path.join(output_dir, "raw_input.mp4")
         output_path = os.path.join(output_dir, "short_output.mp4")
 
-        # Clean up old files if they exist
+        # Clean up old files
         for f in [input_path, output_path]:
             if os.path.exists(f):
                 os.remove(f)
 
-        # Write YOUTUBE_COOKIES env var to a temp file if present
-        cookies_env = os.getenv("YOUTUBE_COOKIES")
-        if cookies_env:
-            temp_cookie_file = tempfile.NamedTemporaryFile(delete=False, mode='w', encoding='utf-8')
-            temp_cookie_file.write(cookies_env)
-            temp_cookie_file.close()
-            cookie_path = temp_cookie_file.name
-
-        # 1. Download video using yt-dlp with cookie & client impersonation options
         ydl_opts = {
-            # Single combined stream format to prevent FFmpeg memory spikes during download
             'format': 'best[ext=mp4]/best',
             'outtmpl': input_path,
             'overwrites': True,
@@ -54,8 +39,10 @@ def create_short(req: VideoRequest):
             }
         }
 
-        if cookie_path:
-            ydl_opts['cookiefile'] = cookie_path
+        # Check if secret cookie file exists in Render's secret path
+        secret_cookie_path = "/etc/secrets/cookies.txt"
+        if os.path.exists(secret_cookie_path):
+            ydl_opts['cookiefile'] = secret_cookie_path
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([req.video_url])
@@ -63,7 +50,6 @@ def create_short(req: VideoRequest):
         if not os.path.exists(input_path):
             raise Exception("Failed to download video file.")
 
-        # 2. Trim first 59 seconds & crop center to 9:16 vertical ratio (1080x1920)
         ffmpeg_cmd = [
             'ffmpeg', '-y',
             '-i', input_path,
@@ -78,16 +64,7 @@ def create_short(req: VideoRequest):
         ]
         subprocess.run(ffmpeg_cmd, check=True)
 
-        # 3. Return the processed vertical video file
         return FileResponse(output_path, media_type="video/mp4", filename="short.mp4")
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-        
-    finally:
-        # Clean up the temporary cookie file after execution
-        if cookie_path and os.path.exists(cookie_path):
-            try:
-                os.remove(cookie_path)
-            except Exception:
-                pass
