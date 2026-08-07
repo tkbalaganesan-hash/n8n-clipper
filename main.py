@@ -1,4 +1,5 @@
 import os
+import tempfile
 import subprocess
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
@@ -16,6 +17,10 @@ def health_check():
 
 @app.post("/create-short")
 def create_short(req: VideoRequest):
+    cookie_path = None
+    input_path = None
+    output_path = None
+
     try:
         output_dir = "/tmp/downloads"
         os.makedirs(output_dir, exist_ok=True)
@@ -27,15 +32,36 @@ def create_short(req: VideoRequest):
             if os.path.exists(f):
                 os.remove(f)
 
-        # 1. Download best quality video under 1080p using yt-dlp
+        # Write YOUTUBE_COOKIES env var to a temp file if present
+        cookies_env = os.getenv("YOUTUBE_COOKIES")
+        if cookies_env:
+            temp_cookie_file = tempfile.NamedTemporaryFile(delete=False, mode='w', encoding='utf-8')
+            temp_cookie_file.write(cookies_env)
+            temp_cookie_file.close()
+            cookie_path = temp_cookie_file.name
+
+        # 1. Download video using yt-dlp with cookie & client impersonation options
         ydl_opts = {
-            'format': 'bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+            # Single combined stream format to prevent FFmpeg memory spikes during download
+            'format': 'best[ext=mp4]/best',
             'outtmpl': input_path,
             'overwrites': True,
-            'quiet': True
+            'quiet': False,
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android', 'ios', 'web']
+                }
+            }
         }
+
+        if cookie_path:
+            ydl_opts['cookiefile'] = cookie_path
+
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([req.video_url])
+
+        if not os.path.exists(input_path):
+            raise Exception("Failed to download video file.")
 
         # 2. Trim first 59 seconds & crop center to 9:16 vertical ratio (1080x1920)
         ffmpeg_cmd = [
@@ -57,3 +83,11 @@ def create_short(req: VideoRequest):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+        
+    finally:
+        # Clean up the temporary cookie file after execution
+        if cookie_path and os.path.exists(cookie_path):
+            try:
+                os.remove(cookie_path)
+            except Exception:
+                pass
