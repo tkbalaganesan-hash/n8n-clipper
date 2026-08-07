@@ -29,17 +29,19 @@ def create_short(request: VideoRequest):
     setup_cookies()
 
     ydl_opts = {
-        # Catch-all format string: grabs any available stream (video+audio, video-only, or audio-only)
-        "format": "b/bv*+ba/b*/worst",
+        # Total fallback: accept merged, single stream, or worst quality if YouTube blocks HD on cloud IPs
+        "format": "best/b/bv*+ba/b*/worst",
         "cookiefile": WRITABLE_COOKIES if os.path.exists(WRITABLE_COOKIES) else None,
         "outtmpl": "/tmp/%(id)s.%(ext)s",
-        # Force clients that bypass cloud IP format blocks
+        # Force mobile/creator client payloads to bypass Render IP format filtering
         "extractor_args": {
             "youtube": {
-                "player_client": ["ios", "android_creator", "mweb"],
-                "player_skip": ["webpage", "configs"],
+                "player_client": ["android", "ios", "mweb"],
+                "player_skip": ["configs", "webpage"],
             }
         },
+        "nocheckcertificate": True,
+        "ignoreerrors": False,
         "quiet": True,
         "no_warnings": True,
     }
