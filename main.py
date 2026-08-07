@@ -34,16 +34,16 @@ def create_short(req: VideoRequest):
             'quiet': False,
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['android', 'ios', 'web']
+                    'player_client': ['mweb', 'android', 'ios']
                 }
             }
         }
 
-        # Use the secret file mounted by Render and mark as read-only
+        # Check for Render secret cookie file
         secret_cookie_path = "/etc/secrets/cookies.txt"
         if os.path.exists(secret_cookie_path):
             ydl_opts['cookiefile'] = secret_cookie_path
-            ydl_opts['cookiefile_read_only'] = True
+            ydl_opts['cookiefile_read_only'] = True  # Prevents [Errno 30] read-only filesystem crash
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([req.video_url])
