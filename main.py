@@ -27,12 +27,14 @@ def create_short(request: VideoRequest):
     # Ensure fresh copy before running yt-dlp
     setup_cookies()
 
-    ydl_opts = {
-        'format': 'best',
-        # Use the writable path in /tmp instead of /etc/secrets/
-        'cookiefile': WRITABLE_COOKIES if os.path.exists(WRITABLE_COOKIES) else None,
-        'outtmpl': '/tmp/%(id)s.%(ext)s',
-    }
+  ydl_opts = {
+    # Change 'best' to 'bestvideo+bestaudio/best'
+    'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best',
+    'cookiefile': WRITABLE_COOKIES if os.path.exists(WRITABLE_COOKIES) else None,
+    'outtmpl': '/tmp/%(id)s.%(ext)s',
+    # Ensures compatibility if merging streams
+    'merge_output_format': 'mp4',
+  }
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
