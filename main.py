@@ -22,7 +22,7 @@ def create_short(req: VideoRequest):
         input_path = os.path.join(output_dir, "raw_input.mp4")
         output_path = os.path.join(output_dir, "short_output.mp4")
 
-        # Clean up old files
+        # Clean up old files if they exist
         for f in [input_path, output_path]:
             if os.path.exists(f):
                 os.remove(f)
@@ -39,10 +39,11 @@ def create_short(req: VideoRequest):
             }
         }
 
-        # Check if secret cookie file exists in Render's secret path
+        # Use the secret file mounted by Render and mark as read-only
         secret_cookie_path = "/etc/secrets/cookies.txt"
         if os.path.exists(secret_cookie_path):
             ydl_opts['cookiefile'] = secret_cookie_path
+            ydl_opts['cookiefile_read_only'] = True
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([req.video_url])
@@ -50,6 +51,7 @@ def create_short(req: VideoRequest):
         if not os.path.exists(input_path):
             raise Exception("Failed to download video file.")
 
+        # Trim first 59 seconds & crop center to 9:16 vertical ratio (1080x1920)
         ffmpeg_cmd = [
             'ffmpeg', '-y',
             '-i', input_path,
