@@ -10,31 +10,33 @@ app = FastAPI()
 SECRET_COOKIES = "/etc/secrets/cookies.txt"
 WRITABLE_COOKIES = "/tmp/cookies.txt"
 
+
 def setup_cookies():
     """Copies read-only Render secret to writable /tmp directory."""
     if os.path.exists(SECRET_COOKIES):
         shutil.copyfile(SECRET_COOKIES, WRITABLE_COOKIES)
         os.chmod(WRITABLE_COOKIES, 0o600)
 
-# Run setup on startup
+
+# Run cookie setup on startup
 setup_cookies()
+
 
 class VideoRequest(BaseModel):
     video_url: str
+
 
 @app.post("/create-short")
 def create_short(request: VideoRequest):
     # Ensure fresh copy before running yt-dlp
     setup_cookies()
 
-  ydl_opts = {
-    # Change 'best' to 'bestvideo+bestaudio/best'
-    'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best',
-    'cookiefile': WRITABLE_COOKIES if os.path.exists(WRITABLE_COOKIES) else None,
-    'outtmpl': '/tmp/%(id)s.%(ext)s',
-    # Ensures compatibility if merging streams
-    'merge_output_format': 'mp4',
-  }
+    ydl_opts = {
+        "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best",
+        "cookiefile": WRITABLE_COOKIES if os.path.exists(WRITABLE_COOKIES) else None,
+        "outtmpl": "/tmp/%(id)s.%(ext)s",
+        "merge_output_format": "mp4",
+    }
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
